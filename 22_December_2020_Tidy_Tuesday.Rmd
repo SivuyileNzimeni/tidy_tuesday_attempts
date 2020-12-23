@@ -1,0 +1,92 @@
+---
+title: "Tidy_Tuesday_22_December_2020"
+author: "Sivuyile Nzimneni"
+date: "22/12/2020"
+output: html_document
+---
+```{r,setup}
+library(tidyverse)
+library(ggthemes)
+library(janitor)
+library(extrafontdb)
+library(extrafont)
+theme_set(theme_clean())
+```
+# Introduction
+In this project, we will import the tidy tuesday dataset from the rfordatascience official repo. Thereafter, we check for missing values and handle them accordingly. 
+```{r,Tidy_Tuesday_Dataset}
+BigMac <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-12-22/big-mac.csv')
+
+MV_BigMac <- data.frame(missing_values = colSums(is.na(BigMac)),
+           column_length = dim(BigMac)[1]) %>% 
+  mutate(percentage = 100/column_length*missing_values,
+         variable_names = names(BigMac))
+
+MV_BigMac <- subset(MV_BigMac,
+                    MV_BigMac$percentage>48)
+
+BigMac <- BigMac[,-c(13:19)]
+
+BigMac <- 
+BigMac %>%
+  mutate(year = lubridate::year(date),
+         month = as.character(lubridate::month(date,abbr=FALSE,label=TRUE)))
+rm("MV_BigMac")
+```
+
+## Finalising the Dataset
+
+Our analysis of the dataset found columns 13 to 19 had missing values for approximately 49% of the columns. There are numerous ways to handle missing values. For one, we could use the existing values and available variables to calculate the missing values. Another alternative is to impute the missing values through the mice package (see: Van Buuren *et al*.(2020)). However, given the size and pattern of the missing values it would be imprudent to use the mice package's collection of algorithms to impute the values. As a consequence, we subset the dataframe to variables with no missing values. Next, we use the data360r package (see Ramin Aliyev *et al*(2020)) to obtain country's respective income level. Based on 2006 GNP per capita, a country's income level is calculated and classified into the following categories: 1) Low Income (LIC), 2) Low Middle Income (LMC), 3)Upper Middle Income and 4) High Income (HIC). We use these categories to filter through the dataset. For purpose of our visualisation, we focus on Upper Middle Income countries (UMC). Furthermore, we filter the dataset to focus on the most recent Big Mac prices (i.e. July 2020).
+
+```{r,Income_Status}
+BigMac <- inner_join(BigMac,data360r::get_metadata360())
+
+BigMac_2020 <- BigMac %>% 
+  filter(year== 2020,
+         month =="July")
+```
+
+# Visualisation
+
+Finally, we can use the our dataset to visualise Big Mac prices among Upper Middle Income countries. To style the visualisation, we use [McDonalds corporate branding guidelines](https://www.mcdonalds.cz/assets/downloads/mcdelivery_brandbook.pdf). 
+ 
+```{r Initial_Viz}
+BigMac_Viz <- 
+BigMac_2020 %>%
+  mutate(name= fct_reorder(name,dollar_price)) %>%
+  filter(incomeLevel =="UMC") %>% 
+  ggplot()+
+  geom_col(aes(name,dollar_price),fill="#FFC836")+
+  geom_text(aes(name,dollar_price,label=paste0("$",round(dollar_price,2)),fontface="bold"),colour="#000000")+
+  coord_flip()+
+  theme_minimal()+
+  labs(title= "McDonalds Big Mac",
+       subtitle = "The price($)of a Big Mac among Upper Middle Income Countries (July 2020)",
+       x= "country",
+       y = "price",
+       caption=c("Source: The Economist| Visual:@Sivu_Nzimeni| Data:rfordatascience /
+tidytuesday| Branding Guidelines:https://www.mcdonalds.cz/assets/downloads/mcdelivery_brandbook.pdf"))+
+    theme(text = element_text(family = "Yanone Kaffeesatz",
+                            face="bold",
+                            colour = "#FFC836"),
+          plot.subtitle = element_text(face="italic",hjust=0.5),
+          axis.text.x = element_text(colour="#FFC836"),
+          axis.text.y= element_text(colour = "#FFC836"),
+          plot.title = element_text(hjust =0.5,vjust = 0.7),
+          plot.background = element_rect(fill ="#BD0017"),
+          panel.grid = NULL,
+          plot.margin = NULL,
+          panel.grid.major =element_line(colour ="#BD0017"),
+          panel.grid.minor = element_line(colour="#BD0017"),
+          plot.caption = element_text(hjust = 0.5,face = "italic"))
+ggsave(filename = "BigMac_Viz.png",
+       plot=BigMac_Viz,
+       device = "png",
+       units = "cm",
+       height = 15,
+       width = 17)
+
+BigMac_Viz
+```
+
+
